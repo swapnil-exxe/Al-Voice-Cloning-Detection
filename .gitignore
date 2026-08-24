@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+venv/
+env/
+.venv/
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Environment & Config
+.env
+.env.local
+.vscode/
+.idea/
+
+# OS Artifacts
+.DS_Store
+Thumbs.db
+
+# Temporary test audio
+data/temp_*
+data/corpus/temp_*
+
+# Database
+*.sqlite3
+voiceguard.db

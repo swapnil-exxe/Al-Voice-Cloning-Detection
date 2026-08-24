@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package voiceguard;
+
+// Service to analyze live audio streams and retrieve forensic reports.
+service VoiceGuardService {
+  // Streams raw binary audio samples and returns dynamic risk assessments in near-real-time.
+  rpc StreamAudio(stream AudioChunk) returns (stream RiskTelemetry);
+
+  // Audits pre-recorded audio files for security verification.
+  rpc CheckFile(AudioFile) returns (ForensicReport);
+}
+
+message AudioChunk {
+  bytes pcm_data = 1;              // Raw float32 PCM samples (typically 4096 samples block)
+  string session_token = 2;        // JWT access token
+  string call_origin = 3;          // e.g. "international_voip"
+  bool is_known_contact = 4;
+  float transaction_value = 5;     // Financial context sizing
+}
+
+message RiskTelemetry {
+  int32 risk_score = 1;            // Smoothed risk rating (0-100)
+  float ai_probability = 2;        // Neural network confidence score (0.0-1.0)
+  string risk_level = 3;           // "LOW", "MEDIUM", "HIGH", "CRITICAL"
+  string detected_language = 4;    // e.g. "hi" or "en"
+  float language_confidence = 5;
+  repeated string evidence = 6;    // List of flagged anomalies
+  string matched_context = 7;      // Fraud keyword context triggered
+}
+
+message AudioFile {
+  bytes file_content = 1;          // Entire file data (mp3, wav)
+  string filename = 2;
+  string session_token = 3;
+}
+
+message ForensicReport {
+  string session_id = 1;
+  int32 risk_score = 2;
+  float ai_probability = 3;
+  string risk_level = 4;
+  string detected_language = 5;
+  repeated string evidence = 6;
+  string explainability_report = 7;
+  map<string, float> extracted_features = 8;
+}

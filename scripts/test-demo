@@ -1,0 +1,191 @@
+#!/opt/anaconda3/bin/python3
+import os
+import sys
+import json
+import time
+import asyncio
+import numpy as np
+import urllib.request
+import urllib.parse
+from datetime import datetime
+
+# Add root folder to python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# Determine backend port/url
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+WS_URL = BACKEND_URL.replace("http", "ws").replace("https", "wss")
+
+def make_http_request(url, data=None, headers=None, method="GET"):
+    """Helper to perform standard HTTP calls without external libraries (like requests)."""
+    if headers is None:
+        headers = {}
+    
+    encoded_data = None
+    if data is not None:
+        if isinstance(data, dict):
+            encoded_data = json.dumps(data).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        elif isinstance(data, str):
+            encoded_data = data.encode("utf-8")
+            
+    req = urllib.request.Request(url, data=encoded_data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=5) as response:
+            res_data = response.read().decode("utf-8")
+            return json.loads(res_data), response.status
+    except urllib.error.HTTPError as e:
+        err_content = e.read().decode("utf-8")
+        try:
+            return json.loads(err_content), e.code
+        except Exception:
+            return {"detail": err_content}, e.code
+    except Exception as e:
+        return {"detail": str(e)}, 500
+
+async def test_websocket_stream(token):
+    """Establishes websocket connection and streams synthetic speech PCM float32 packets."""
+    import websockets
+    
+    ws_uri = f"{WS_URL}/ws/live-analysis?token={token}&simulated=true"
+    print(f"[WS Test] Connecting to: {ws_uri} ...")
+    
+    try:
+        async with websockets.connect(ws_uri) as websocket:
+            print("[WS Test] Connection established successfully.")
+            
+            # Generate synthetic float32 PCM audio (16kHz, mono) representing synthetic monotone speech
+            # 6 blocks of 4096 samples = ~1.5 seconds
+            sample_rate = 16000
+            samples_per_chunk = 4096
+            
+            # Simulated monotone tone: a flat sine wave at 120Hz
+            t = np.arange(samples_per_chunk * 6) / sample_rate
+            audio_samples = 0.5 * np.sin(2 * np.pi * 120.0 * t)
+            # Add subtle high-frequency synthetic artifacts
+            audio_samples += 0.05 * np.sin(2 * np.pi * 4000.0 * t)
+            audio_samples = audio_samples.astype(np.float32)
+            
+            print("[WS Test] Starting real-time audio chunk transmission loop (1x rate simulate)...")
+            
+            for block in range(6):
+                start_idx = block * samples_per_chunk
+                end_idx = start_idx + samples_per_chunk
+                chunk = audio_samples[start_idx:end_idx]
+                
+                # Send binary float32 PCM frame
+                await websocket.send(chunk.tobytes())
+                print(f"  -> Transmitted block {block + 1}/6 ({len(chunk)} PCM samples)")
+                
+                # Wait 256ms to simulate 1x realtime speed
+                await asyncio.sleep(0.256)
+                
+                # Periodically read response frames if any returned
+                try:
+                    # Non-blocking read check
+                    resp = await asyncio.wait_for(websocket.recv(), timeout=0.1)
+                    payload = json.loads(resp)
+                    print(f"  <- Received Telemetry: Risk Score = {payload['risk_score']}%, Risk Level = {payload['risk_level']}, Detected Language = {payload['language'].toUpperCase() if hasattr(payload['language'], 'toUpperCase') else payload['language']}")
+                except asyncio.TimeoutError:
+                    pass
+            
+            # Final drain of websocket frames
+            print("[WS Test] Finalizing streaming and checking final reports...")
+            try:
+                resp = await asyncio.wait_for(websocket.recv(), timeout=1.0)
+                payload = json.loads(resp)
+                print(f"  <- Final Telemetry: Risk Score = {payload['risk_score']}%, Level = {payload['risk_level']}, Evidence: {payload['evidence']}")
+            except asyncio.TimeoutError:
+                print("[WS Test] No final telemetry returned. Closing.")
+                
+            await websocket.close()
+            print("[WS Test] Closed stream connection.")
+            return True
+            
+    except Exception as e:
+        print(f"[WS Test] Websocket stream failure: {e}")
+        return False
+
+async def main():
+    print("==================================================")
+    print("           VOICEGUARD END-TO-END VERIFICATION     ")
+    print("==================================================")
+    
+    # Generate unique email for registration
+    timestamp_seed = int(time.time())
+    email = f"operator_{timestamp_seed}@voiceguard.sec"
+    password = "securepassphrase123"
+    
+    # 1. Test registration
+    print(f"[Step 1] Registering unique operator: {email} ...")
+    signup_payload = {
+        "email": email,
+        "password": password,
+        "role": "ANALYST"
+    }
+    data, code = make_http_request(f"{BACKEND_URL}/api/auth/signup", signup_payload, method="POST")
+    if code != 200:
+        print(f"[-] Signup failed: {data}. Code: {code}")
+        sys.exit(1)
+        
+    token = data["access_token"]
+    print(f"[+] Signup successful. Role clearance: {data['role']}")
+    
+    # 2. Test Login
+    print("[Step 2] Testing operator session credentials login...")
+    # OAuth2 uses url-encoded body
+    login_body = urllib.parse.urlencode({"username": email, "password": password})
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    data, code = make_http_request(f"{BACKEND_URL}/api/auth/login", login_body, headers=headers, method="POST")
+    if code != 200:
+        print(f"[-] Login failed: {data}. Code: {code}")
+        sys.exit(1)
+    print("[+] Login successful. JWT Session established.")
+    
+    # 3. Stream Live Ingestion WebSocket
+    print("[Step 3] Initiating WebSocket real-time analysis pipeline...")
+    ws_passed = await test_websocket_stream(token)
+    if not ws_passed:
+        print("[-] WebSocket streaming failed.")
+        sys.exit(1)
+    print("[+] WebSocket real-time pipeline verified successfully.")
+    
+    # 4. Verify History and Alerts Commits
+    print("[Step 4] Checking session archiving database status...")
+    # Wait a moment to ensure DB transaction finishes
+    time.sleep(1.0)
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    history_data, code = make_http_request(f"{BACKEND_URL}/api/sessions", headers=headers)
+    if code != 200 or history_data["total"] == 0:
+        print(f"[-] Database verify failed: {history_data}. Code: {code}")
+        sys.exit(1)
+        
+    session_id = history_data["sessions"][0]["id"]
+    risk = history_data["sessions"][0]["final_risk_score"]
+    print(f"[+] Database confirmed session successfully committed. Session ID: {session_id}. Score: {risk}%")
+    
+    # 5. Check Security Incident Alerts
+    print("[Step 5] Checking security alert log status...")
+    alerts_data, code = make_http_request(f"{BACKEND_URL}/api/sessions/alerts/active", headers=headers)
+    if code != 200:
+        print(f"[-] Alert log fetch failed: {alerts_data}. Code: {code}")
+        sys.exit(1)
+        
+    print(f"[+] Active threat alerts found: {len(alerts_data)}")
+    for a in alerts_data:
+        print(f"  Alert ID: {a['id']} | Severity: {a['severity']} | Msg: {a['message']}")
+        
+    print("\n==================================================")
+    print("         ALL VERIFICATION INTEGRATION PASSED      ")
+    print("==================================================")
+
+if __name__ == "__main__":
+    # We must ensure websockets package is present for test-demo
+    try:
+        import websockets
+    except ImportError:
+        print("[Demo Test] Installing 'websockets' package for testing...")
+        os.system("/opt/anaconda3/bin/pip install websockets")
+        
+    asyncio.run(main())

@@ -1,0 +1,4 @@
+audio_id,speaker,language,audio_condition,predicted_score,true_label,reason_for_failure
+libri_genuine_extra_1.wav,unseen_spk_1,en,gsm_telephony,0.9109509358983199,genuine,False Positive warning trigger on phone-call genuine speech
+libri_genuine_extra_3.wav,unseen_spk_3,en,gsm_telephony,0.9402768142721617,genuine,False Positive warning trigger on phone-call genuine speech
+libri_genuine_extra_4.wav,unseen_spk_4,en,gsm_telephony,0.9402768142721617,genuine,False Positive warning trigger on phone-call genuine speech

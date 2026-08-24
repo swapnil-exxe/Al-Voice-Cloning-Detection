@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-zinc-950 text-zinc-100 font-sans antialiased;
+  }
+}
+
+/* Custom Scrollbar for High Density Listings */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(24, 24, 27, 0.5); /* zinc-900 */
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(63, 63, 70, 0.8); /* zinc-700 */
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(82, 82, 91, 0.9); /* zinc-600 */
+}
+
+/* Flashing Animation for Live Call indicator */
+@keyframes flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.animate-flash {
+  animation: flash 1.5s infinite;
+}
+
+/* Custom card shadow styling */
+.soc-glow-low {
+  box-shadow: 0 0 15px -3px rgba(16, 185, 129, 0.15);
+}
+.soc-glow-medium {
+  box-shadow: 0 0 15px -3px rgba(245, 158, 11, 0.15);
+}
+.soc-glow-high {
+  box-shadow: 0 0 15px -3px rgba(239, 68, 68, 0.15);
+}
+.soc-glow-critical {
+  box-shadow: 0 0 15px -3px rgba(168, 85, 247, 0.15);
+}
