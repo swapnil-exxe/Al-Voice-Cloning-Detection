@@ -9,6 +9,8 @@ def load_and_preprocess_file(file_path: str, target_sr: int = 16000) -> np.ndarr
 
 def preprocess_audio_array(y: np.ndarray, sr: int, target_sr: int = 16000) -> np.ndarray:
     """Standardizes sampling rate, converts to float32, and normalizes audio array."""
+    if y is None or len(y) == 0:
+        return np.array([], dtype=np.float32)
     # Ensure float32
     y = y.astype(np.float32)
     
